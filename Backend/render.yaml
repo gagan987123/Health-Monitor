@@ -7,10 +7,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: SMTP_HOST
-        value: smtp.sendgrid.net
-      - key: SMTP_PORT
-        value: 587
       - key: EMAIL_USER
         sync: false
       - key: EMAIL_PASS
