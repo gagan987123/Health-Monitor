@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -12,7 +14,6 @@ const io = new Server(server, {
         methods: ["GET", "POST"]
     }
 });
-require('dotenv').config();
 const port = process.env.PORT || 3000;
 
 // Enable CORS for all routes
