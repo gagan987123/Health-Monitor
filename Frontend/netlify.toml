@@ -9,3 +9,5 @@
 
 [build.environment]
   NODE_VERSION = "18"
+  VITE_BACKEND_URL = "https://health-monitor-uyt6.onrender.com"
+  VITE_EMAIL_TO = "ginnysangral786@gmail.com"

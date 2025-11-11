@@ -15,7 +15,9 @@ import {
 } from '@mui/icons-material';
 import useStore from '../store/useStore';
 import StatCard from '../components/Dashboard/StatCard';
-import VitalSignsChart from '../components/Dashboard/VitalSignsChart';
+import HeartRateChart from '../components/Dashboard/HeartRateChart';
+import SpO2Chart from '../components/Dashboard/SpO2Chart';
+import TemperatureChart from '../components/Dashboard/TemperatureChart';
 
 
 const THRESHOLDS = {
@@ -37,10 +39,16 @@ const Dashboard = () => {
   const [socketConnected, setSocketConnected] = React.useState(false);
   const alertIdCounter = React.useRef(0);
 
+  // Function to dismiss an alert
+  const dismissAlert = (alertId) => {
+    setAlerts(prevAlerts => prevAlerts.filter(alert => alert.id !== alertId));
+  };
+
   // Initialize Socket.IO connection
   useEffect(() => {
     // Connect to the WebSocket server
-    const socket = io('http://localhost:3000', {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+    const socket = io(backendUrl, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -54,7 +62,6 @@ const Dashboard = () => {
 
     // Handle vitals updates from WebSocket
     socket.on('vitals', (data) => {
-      console.log('Received vitals update:', data);
       processVitalsData(data);
     });
 
@@ -76,10 +83,110 @@ const Dashboard = () => {
     };
   }, [updateVitals]);
 
+  // Advanced fall detection algorithm
+  const detectFall = (accelerometer, gyroscope) => {
+    if (!accelerometer || !gyroscope) return false;
+
+    // Calculate total acceleration magnitude
+    const totalAccel = accelerometer.total || Math.sqrt(
+      Math.pow(accelerometer.x, 2) + 
+      Math.pow(accelerometer.y, 2) + 
+      Math.pow(accelerometer.z, 2)
+    );
+
+    // Calculate total gyroscope magnitude (rotation rate)
+    const totalGyro = Math.sqrt(
+      Math.pow(gyroscope.x, 2) + 
+      Math.pow(gyroscope.y, 2) + 
+      Math.pow(gyroscope.z, 2)
+    );
+
+    // Fall detection thresholds
+    const FREEFALL_THRESHOLD = 6.0;  // m/s² - Sudden drop in acceleration
+    const IMPACT_THRESHOLD = 20.0;   // m/s² - High impact force
+    const GYRO_THRESHOLD = 3.0;      // rad/s - Rapid rotation during fall
+
+    // Detect freefall (sudden decrease in acceleration)
+    const isFreefalling = totalAccel < FREEFALL_THRESHOLD;
+    
+    // Detect high impact (sudden increase in acceleration)
+    const isHighImpact = totalAccel > IMPACT_THRESHOLD;
+    
+    // Detect rapid rotation (tumbling during fall)
+    const isRapidRotation = totalGyro > GYRO_THRESHOLD;
+
+    // A fall is detected if:
+    // 1. High impact with rapid rotation (sudden fall or crash)
+    // 2. Freefall followed by impact (typical fall pattern)
+    const isFall = (isHighImpact && isRapidRotation) || 
+                   (isFreefalling && totalGyro > 1.0);
+
+
+
+    return isFall;
+  };
+
+  // Function to send emergency email notification
+  const sendEmergencyEmail = async (emergencyData) => {
+    try {
+      const emailData = {
+        to: process.env.VITE_EMAIL_TO,
+        subject: `🚨 EMERGENCY ALERT: ${emergencyData.fallType}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #fff3cd; border: 2px solid #dc3545; border-radius: 10px;">
+            <h1 style="color: #dc3545; text-align: center;">🚨 EMERGENCY FALL ALERT 🚨</h1>
+            
+            <div style="background-color: white; padding: 20px; border-radius: 5px; margin: 20px 0;">
+              <h2 style="color: #dc3545;">Incident Details</h2>
+              <p><strong>Type:</strong> ${emergencyData.fallType}</p>
+              <p><strong>Impact Force:</strong> ${emergencyData.impactForce} m/s²</p>
+              <p><strong>Time:</strong> ${new Date(emergencyData.timestamp).toLocaleString()}</p>
+            </div>
+
+            <div style="background-color: white; padding: 20px; border-radius: 5px; margin: 20px 0;">
+              <h2 style="color: #0066cc;">Patient Location</h2>
+              <p><strong>Coordinates:</strong> ${emergencyData.patientLocation.lat.toFixed(6)}, ${emergencyData.patientLocation.lon.toFixed(6)}</p>
+              <p><a href="https://www.google.com/maps?q=${emergencyData.patientLocation.lat},${emergencyData.patientLocation.lon}" 
+                     style="background-color: #0066cc; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                View on Google Maps
+              </a></p>
+            </div>
+
+            <div style="background-color: white; padding: 20px; border-radius: 5px; margin: 20px 0;">
+              <h2 style="color: #ff6b6b;">Patient Vitals</h2>
+              <p><strong>Heart Rate:</strong> ${emergencyData.vitals.heartRate} bpm</p>
+              <p><strong>SpO2:</strong> ${emergencyData.vitals.spo2}%</p>
+              <p><strong>Temperature:</strong> ${emergencyData.vitals.temperature}°C</p>
+            </div>
+
+            <div style="background-color: #dc3545; color: white; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center;">
+              <h3 style="margin: 0;">⚠️ IMMEDIATE MEDICAL ATTENTION REQUIRED ⚠️</h3>
+            </div>
+          </div>
+        `
+      };
+
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+      const response = await fetch(`${backendUrl}/api/send-emergency-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData),
+      });
+
+      if (response.ok) {
+        console.log('✅ Emergency email sent successfully');
+      } else {
+        console.error('❌ Failed to send emergency email:', await response.text());
+      }
+    } catch (error) {
+      console.error('❌ Error sending emergency email:', error);
+    }
+  };
+
   // Process incoming WebSocket data
   const processVitalsData = (data) => {
-    console.log('Processing vitals data:', data);
-    
     // Update store with new vitals
     updateVitals({
       heartRate: data.heartRate || 0,
@@ -118,11 +225,24 @@ const Dashboard = () => {
       });
     }
 
-    // Handle fall alert
-    if (data.fallAlert === true) {
-      console.log('🚨 FALL DETECTED! 🚨');
+    // Handle fall detection with advanced algorithm
+    const isFallDetected = data.fallAlert === true && 
+                          detectFall(data.accelerometer, data.gyroscope);
+    
+    if (isFallDetected) {
+      const totalAccel = data.accelerometer?.total || Math.sqrt(
+        Math.pow(data.accelerometer?.x || 0, 2) + 
+        Math.pow(data.accelerometer?.y || 0, 2) + 
+        Math.pow(data.accelerometer?.z || 0, 2)
+      );
+      
+      // Determine fall severity
+      const fallType = totalAccel > 20 ? 'HIGH IMPACT (Possible car crash or severe fall)' : 'FALL DETECTED';
+      
+      console.log('🚨', fallType, '🚨');
       console.log('Accelerometer:', data.accelerometer);
       console.log('Gyroscope:', data.gyroscope);
+      console.log('Impact Force:', totalAccel.toFixed(2), 'm/s²');
       
       // Get user's geolocation
       if (navigator.geolocation) {
@@ -138,13 +258,26 @@ const Dashboard = () => {
             console.log('Distance:', nearestHospital.distance.toFixed(2), 'km');
             console.log('Contact:', nearestHospital.contact);
             console.log('Address:', nearestHospital.address);
-            console.log('Google Maps:', `https://www.google.com/maps?q=${nearestHospital.lat},${nearestHospital.lon}`);
-            
-            // Add critical fall alert
+         
+            // Send emergency email notification
+            sendEmergencyEmail({
+              fallType,
+              impactForce: totalAccel.toFixed(1),
+              patientLocation: { lat: userLat, lon: userLon },
+              nearestHospital,
+              vitals: {
+                heartRate: data.heartRate,
+                spo2: data.spo2,
+                temperature: data.temperature
+              },
+              timestamp: new Date().toISOString()
+            });
+         
+            // Add critical fall alert with severity info
             newAlerts.push({
               id: `alert-${++alertIdCounter.current}`,
               type: 'critical',
-              message: `⚠️ FALL DETECTED! Nearest hospital: ${nearestHospital.name} (${nearestHospital.distance.toFixed(2)} km away)`,
+              message: `🚨 ${fallType}! Impact: ${totalAccel.toFixed(1)} m/s². Hospital: ${nearestHospital.name} (${nearestHospital.distance.toFixed(2)} km)`,
               timestamp: new Date().toISOString(),
             });
             
@@ -154,10 +287,17 @@ const Dashboard = () => {
           (error) => {
             console.error('Error getting location:', error);
             // Add fall alert without location
+            const totalAccel = data.accelerometer?.total || Math.sqrt(
+              Math.pow(data.accelerometer?.x || 0, 2) + 
+              Math.pow(data.accelerometer?.y || 0, 2) + 
+              Math.pow(data.accelerometer?.z || 0, 2)
+            );
+            const fallType = totalAccel > 20 ? 'HIGH IMPACT' : 'FALL DETECTED';
+            
             newAlerts.push({
               id: `alert-${++alertIdCounter.current}`,
               type: 'critical',
-              message: '⚠️ FALL DETECTED! Unable to get location.',
+              message: `🚨 ${fallType}! Impact: ${totalAccel.toFixed(1)} m/s². Unable to get location.`,
               timestamp: new Date().toISOString(),
             });
             
@@ -167,10 +307,17 @@ const Dashboard = () => {
         );
       } else {
         // Geolocation not supported
+        const totalAccel = data.accelerometer?.total || Math.sqrt(
+          Math.pow(data.accelerometer?.x || 0, 2) + 
+          Math.pow(data.accelerometer?.y || 0, 2) + 
+          Math.pow(data.accelerometer?.z || 0, 2)
+        );
+        const fallType = totalAccel > 20 ? 'HIGH IMPACT' : 'FALL DETECTED';
+        
         newAlerts.push({
           id: `alert-${++alertIdCounter.current}`,
           type: 'critical',
-          message: '⚠️ FALL DETECTED! Geolocation not supported.',
+          message: `🚨 ${fallType}! Impact: ${totalAccel.toFixed(1)} m/s². Geolocation not supported.`,
           timestamp: new Date().toISOString(),
         });
         
@@ -297,13 +444,92 @@ const Dashboard = () => {
 
   // Function to find nearest hospital
   const findNearestHospital = (userLat, userLon) => {
-    // Dummy list of hospitals with coordinates (latitude, longitude) in Bangalore
+    // Real hospitals in Bangalore with accurate coordinates and contact information
     const hospitals = [
-      { name: 'Apollo Hospital', lat: 12.9716, lon: 77.5946, contact: '+91 80 2630 4050' },
-      { name: 'Manipal Hospital', lat: 12.9279, lon: 77.6271, contact: '+91 80 2502 4444' },
-      { name: 'Fortis Hospital', lat: 12.9665, lon: 77.7131, contact: '+91 80 6621 4444' },
-      { name: 'Narayana Health', lat: 12.8928, lon: 77.6337, contact: '+91 80 6750 6900' },
-      { name: 'Columbia Asia Hospital', lat: 12.9569, lon: 77.7011, contact: '+91 80 6165 6661' }
+      { 
+        name: 'Manipal Hospital (Old Airport Road)', 
+        lat: 12.9698, 
+        lon: 77.6500, 
+        contact: '+91 80 2502 4444',
+        address: '98, HAL Old Airport Rd, HAL 2nd Stage, Kodihalli, Bengaluru, Karnataka 560017'
+      },
+      { 
+        name: 'Apollo Hospitals (Bannerghatta Road)', 
+        lat: 12.8898, 
+        lon: 77.5995, 
+        contact: '+91 80 2630 4050',
+        address: '154/11, Opposite IIM-B, Bannerghatta Rd, Bengaluru, Karnataka 560076'
+      },
+      { 
+        name: 'Fortis Hospital (Bannerghatta Road)', 
+        lat: 12.9007, 
+        lon: 77.6010, 
+        contact: '+91 80 6621 4444',
+        address: '154/9, Opposite IIM-B, Bannerghatta Rd, Bengaluru, Karnataka 560076'
+      },
+      { 
+        name: 'Narayana Health City', 
+        lat: 12.8066, 
+        lon: 77.5540, 
+        contact: '+91 80 7122 2222',
+        address: '258/A, Bommasandra Industrial Area, Anekal Taluk, Bengaluru, Karnataka 560099'
+      },
+      { 
+        name: 'Columbia Asia Hospital (Whitefield)', 
+        lat: 12.9698, 
+        lon: 77.7499, 
+        contact: '+91 80 6165 6666',
+        address: 'Survey No. 10P & 12P, Ramagondanahalli, Varthur Hobli, Whitefield, Bengaluru, Karnataka 560066'
+      },
+      { 
+        name: 'St. John\'s Medical College Hospital', 
+        lat: 12.9345, 
+        lon: 77.6186, 
+        contact: '+91 80 2206 5000',
+        address: 'Sarjapur Rd, near Koramangala, Bengaluru, Karnataka 560034'
+      },
+      { 
+        name: 'Sakra World Hospital', 
+        lat: 12.9698, 
+        lon: 77.7499, 
+        contact: '+91 80 4969 4969',
+        address: 'SY NO 52/2 & 52/3, Devarabeesanahalli, Varthur Hobli, Outer Ring Rd, Bengaluru, Karnataka 560103'
+      },
+      { 
+        name: 'BGS Gleneagles Global Hospital', 
+        lat: 12.9716, 
+        lon: 77.5946, 
+        contact: '+91 80 2222 7979',
+        address: 'No. 4, Sunkalpalya, Sunkadakatte, Bengaluru, Karnataka 560091'
+      },
+      { 
+        name: 'Aster CMI Hospital', 
+        lat: 13.0358, 
+        lon: 77.5970, 
+        contact: '+91 80 4344 4444',
+        address: '43/2, New Airport Rd, NH.7, Sahakara Nagar, Bengaluru, Karnataka 560092'
+      },
+      { 
+        name: 'Bangalore Baptist Hospital', 
+        lat: 12.9716, 
+        lon: 77.5946, 
+        contact: '+91 80 2668 6666',
+        address: 'Bellary Rd, Hebbal, Bengaluru, Karnataka 560024'
+      },
+      { 
+        name: 'Vydehi Institute of Medical Sciences', 
+        lat: 13.0697, 
+        lon: 77.6416, 
+        contact: '+91 80 2841 2636',
+        address: '#82, EPIP Area, Whitefield, Bengaluru, Karnataka 560066'
+      },
+      { 
+        name: 'Mallya Hospital', 
+        lat: 12.9716, 
+        lon: 77.5946, 
+        contact: '+91 80 2227 7979',
+        address: 'No. 2, Vittal Mallya Rd, Ashok Nagar, Bengaluru, Karnataka 560001'
+      }
     ];
 
     let nearestHospital = null;
@@ -354,8 +580,9 @@ const Dashboard = () => {
       };
       
       setVitalsHistory(prevHistory => {
-        // Keep only the last 50 data points for chart display
-        return [...prevHistory.slice(-49), newDataPoint];
+        // Keep only the last 6 data points for chart display
+        const updatedHistory = [...prevHistory, newDataPoint];
+        return updatedHistory.slice(-6);
       });
     }
   }, [vitals]);
@@ -363,7 +590,13 @@ const Dashboard = () => {
   // Chart component now handles the chart data and options
 
   return (
-    <Box sx={{ flexGrow: 1, p: 3 }}>
+    <Box sx={{ 
+      flexGrow: 1, 
+      p: { xs: 1, sm: 2, md: 3 },
+      width: '100%',
+      maxWidth: '100%',
+      overflowX: 'hidden'
+    }}>
       <Snackbar 
         open={!socketConnected} 
         autoHideDuration={6000}
@@ -394,7 +627,7 @@ const Dashboard = () => {
       )}
 
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={{ xs: 1, sm: 2, md: 3 }} sx={{ mb: { xs: 1, sm: 2, md: 3 } }}>
         <StatCard
           title="Heart Rate"
           value={vitals.heartRate}
@@ -425,13 +658,39 @@ const Dashboard = () => {
       </Grid>
 
       {/* Charts */}
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <VitalSignsChart data={vitalsHistory} />
-        </Grid>
+      <Grid container spacing={{ xs: 1, sm: 2, md: 3 }}>
+        {/* Heart Rate Chart */}
         <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 2, height: '100%', minHeight: 400 }}>
-            <Box sx={{ flexGrow: 1, p: 3 }}>
+          <Box sx={{ height: { xs: 280, sm: 320 } }}>
+            <HeartRateChart data={vitalsHistory} />
+          </Box>
+        </Grid>
+        
+        {/* SpO2 Chart */}
+        <Grid item xs={12} md={4}>
+          <Box sx={{ height: { xs: 280, sm: 320 } }}>
+            <SpO2Chart data={vitalsHistory} />
+          </Box>
+        </Grid>
+        
+        {/* Temperature Chart */}
+        <Grid item xs={12} md={4}>
+          <Box sx={{ height: { xs: 280, sm: 320 } }}>
+            <TemperatureChart data={vitalsHistory} />
+          </Box>
+        </Grid>
+        
+        {/* Alerts Section */}
+        <Grid item xs={12}>
+          <Paper sx={{ 
+            p: { xs: 1, sm: 2 }, 
+            height: '100%', 
+            minHeight: { xs: 'auto', md: 300 }
+          }}>
+            <Box sx={{ 
+              flexGrow: 1, 
+              p: { xs: 1, sm: 2, md: 3 }
+            }}>
               <Box sx={{ mb: 2 }}>
                 <Collapse in={showAlerts && alerts.length > 0}>
                   <Alert 
@@ -450,7 +709,15 @@ const Dashboard = () => {
                   >
                     Recent Alerts ({alerts.length})
                   </Alert>
-                  <Paper elevation={2} sx={{ maxHeight: 200, overflow: 'auto', mb: 3 }}>
+                  <Paper elevation={2} sx={{ 
+                    maxHeight: 200, 
+                    overflow: 'auto', 
+                    mb: { xs: 1, sm: 2, md: 3 },
+                    '& .MuiListItem-root': {
+                      pl: { xs: 1, sm: 2 },
+                      pr: { xs: 4, sm: 6 }
+                    }
+                  }}>
                     <List dense>
                       {alerts.map((alert, index) => (
                         <React.Fragment key={alert.id}>
@@ -508,21 +775,43 @@ const Dashboard = () => {
                   </Alert>
                 )}
               </Box>
-              <Typography variant="h4" gutterBottom>
+              <Typography variant="h5" component="h2" sx={{ 
+                fontSize: { xs: '1.25rem', sm: '1.5rem', md: '2.125rem' },
+                mt: { xs: 2, sm: 0 },
+                mb: 2
+              }}>
                 Emergency Status
               </Typography>
-              <Box>
+              <Box sx={{ width: '100%' }}>
                 {emergency.isActive ? (
-                  <Box sx={{ color: 'error.main', p: 1, border: '1px solid', borderColor: 'error.main', borderRadius: 1 }}>
-                    <Typography variant="h6">🚨 Emergency Alert Triggered</Typography>
-                    <Typography variant="caption" display="block">
+                  <Box sx={{ 
+                    color: 'error.main', 
+                    p: { xs: 1, sm: 2 },
+                    border: '1px solid', 
+                    borderColor: 'error.main', 
+                    borderRadius: 1,
+                    '& .MuiTypography-root': {
+                      fontSize: { xs: '0.875rem', sm: '1rem' }
+                    }
+                  }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 0.5 }}>🚨 Emergency Alert</Typography>
+                    <Typography variant="body2" component="div">
                       Last triggered: {new Date(emergency.lastTriggered).toLocaleString()}
                     </Typography>
                   </Box>
                 ) : (
-                  <Box sx={{ color: 'success.main', p: 1, border: '1px solid', borderColor: 'success.main', borderRadius: 1 }}>
-                    <Typography>✅ System Normal</Typography>
-                    <Typography variant="caption" display="block">
+                  <Box sx={{ 
+                    color: 'success.main', 
+                    p: { xs: 1, sm: 2 },
+                    border: '1px solid', 
+                    borderColor: 'success.main', 
+                    borderRadius: 1,
+                    '& .MuiTypography-root': {
+                      fontSize: { xs: '0.875rem', sm: '1rem' }
+                    }
+                  }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 0.5 }}>✅ System Normal</Typography>
+                    <Typography variant="body2" component="div">
                       Last checked: {new Date().toLocaleString()}
                     </Typography>
                   </Box>
