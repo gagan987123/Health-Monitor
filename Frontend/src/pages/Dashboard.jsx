@@ -47,7 +47,7 @@ const Dashboard = () => {
   // Initialize Socket.IO connection
   useEffect(() => {
     // Connect to the WebSocket server
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://health-monitor-uyt6.onrender.com';
     const socket = io(backendUrl, {
       reconnection: true,
       reconnectionAttempts: 5,
@@ -130,7 +130,7 @@ const Dashboard = () => {
   const sendEmergencyEmail = async (emergencyData) => {
     try {
       const emailData = {
-        to: process.env.VITE_EMAIL_TO,
+        to: 'ginnysangral786@gmail.com',
         subject: `🚨 EMERGENCY ALERT: ${emergencyData.fallType}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #fff3cd; border: 2px solid #dc3545; border-radius: 10px;">
@@ -166,7 +166,7 @@ const Dashboard = () => {
         `
       };
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://health-monitor-uyt6.onrender.com';
       const response = await fetch(`${backendUrl}/api/send-emergency-email`, {
         method: 'POST',
         headers: {

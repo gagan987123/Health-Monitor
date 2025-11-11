@@ -67,13 +67,15 @@ app.post('/vitals', (req, res) => {
     }
 });
 
-// Configure nodemailer transporter (using Gmail as example)
-// For production, use environment variables for credentials
+// Configure nodemailer transporter
+// Use SendGrid for production (works with Render), Gmail for local development
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: process.env.SMTP_PORT || 587,
+    secure: false, // Use TLS
     auth: {
-        user: process.env.EMAIL_USER, // Replace with your email or use env variable
-        pass: process.env.EMAIL_PASS      // Replace with your app password or use env variable
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
     }
 });
 
