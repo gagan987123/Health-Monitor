@@ -4,7 +4,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 
 const app = express();
 const server = http.createServer(app);
@@ -67,17 +67,38 @@ app.post('/vitals', (req, res) => {
     }
 });
 
-// Configure nodemailer transporter
-// Use SendGrid for production (works with Render), Gmail for local development
-const transporter = nodemailer.createTransport({
-    host:  'smtp.gmail.com',
-    port: 587,
-    secure: false, // Use TLS
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+// AWS Lambda function URL for sending emails
+const LAMBDA_EMAIL_FUNCTION_URL = process.env.LAMDA_URL;
+
+// Simple email sending function using AWS Lambda
+async function sendEmailViaLambda({ to, subject, html }) {
+    try {
+        const response = await axios.post(LAMBDA_EMAIL_FUNCTION_URL, {
+            to,
+            subject,
+            html
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            timeout: 15000 // Increased timeout to 15 seconds
+        });
+        
+        // Handle the Lambda response format
+        if (response.data && response.data.body) {
+            return typeof response.data.body === 'string' 
+                ? JSON.parse(response.data.body) 
+                : response.data.body;
+        }
+        return response.data;
+    } catch (error) {
+        console.error('Error calling email Lambda:', error.message);
+        if (error.response) {
+            console.error('Lambda response error:', error.response.data);
+        }
+        throw new Error('Failed to send email via Lambda');
     }
-});
+}
 
 // Route to send emergency email
 app.post('/api/send-emergency-email', async (req, res) => {
@@ -93,15 +114,15 @@ app.post('/api/send-emergency-email', async (req, res) => {
             html: html
         };
         
-        // Send email
-        const info = await transporter.sendMail(mailOptions);
+        // Send email via Lambda
+        const lambdaResponse = await sendEmailViaLambda({ to, subject, html });
         
-        console.log('✅ Email sent successfully:', info.messageId);
+        console.log('✅ Email sent successfully via Lambda:', lambdaResponse.messageId || 'No message ID returned');
         
         res.status(200).json({
             success: true,
             message: 'Emergency email sent successfully',
-            messageId: info.messageId
+            messageId: lambdaResponse.messageId || 'unknown'
         });
     } catch (error) {
         console.error('❌ Error sending email:', error);
