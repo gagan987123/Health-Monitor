@@ -142,6 +142,7 @@ app.post('/api/send-emergency-email', async (req, res) => {
 app.post('/api/ai-predict', async (req, res) => {
     try {
         const { vitalsHistory } = req.body;
+        console.log(vitalsHistory);
         
         if (!GROQ_API_KEY) {
             return res.status(500).json({
