@@ -70,6 +70,10 @@ app.post('/vitals', (req, res) => {
 // AWS Lambda function URL for sending emails
 const LAMBDA_EMAIL_FUNCTION_URL = process.env.LAMDA_URL;
 
+// Groq AI API configuration
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
 // Simple email sending function using AWS Lambda
 async function sendEmailViaLambda({ to, subject, html }) {
     try {
@@ -129,6 +133,95 @@ app.post('/api/send-emergency-email', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to send emergency email',
+            error: error.message
+        });
+    }
+});
+
+// Route to get AI health prediction using Groq
+app.post('/api/ai-predict', async (req, res) => {
+    try {
+        const { vitalsHistory } = req.body;
+        
+        if (!GROQ_API_KEY) {
+            return res.status(500).json({
+                success: false,
+                message: 'Groq API key not configured'
+            });
+        }
+
+        console.log('🤖 Getting AI prediction for vitals history');
+        
+        // Format vitals data for the prompt
+        const vitalsData = vitalsHistory.map((vital, index) => {
+            const time = vital.timestamp ? new Date(vital.timestamp).toLocaleString() : `Reading ${index + 1}`;
+            return `Time: ${time}
+  - Heart Rate: ${vital.heartRate || vital.heart_rate || 'N/A'} bpm
+  - SpO2: ${vital.spo2 || 'N/A'}%
+  - Temperature: ${vital.temperature || 'N/A'}°C`;
+        }).join('\n\n');
+
+        // Create the prompt for Groq AI
+        const prompt = `You are a medical AI assistant analyzing patient vital signs. Based on the following vital signs history, provide a comprehensive health prediction and recommendations.
+
+Vital Signs History:
+${vitalsData}
+
+Please analyze this data and provide:
+1. Current Health Status: Brief assessment of the current vital signs
+2. Trend Analysis: Identify any concerning trends or patterns
+3. Risk Assessment: Potential health risks based on the data
+4. Recommendations: Specific actionable health recommendations
+5. When to Seek Medical Attention: Warning signs to watch for
+
+Format your response in a clear, structured manner. Be professional but easy to understand. If any vitals are concerning, emphasize the importance of consulting a healthcare professional.`;
+
+        // Call Groq API
+        const response = await axios.post(
+            GROQ_API_URL,
+            {
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'You are a helpful medical AI assistant that analyzes vital signs and provides health insights. Always remind users to consult healthcare professionals for serious concerns.'
+                    },
+                    {
+                        role: 'user',
+                        content: prompt
+                    }
+                ],
+                temperature: 0.7,
+                max_tokens: 1024,
+                top_p: 1,
+                stream: false
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${GROQ_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
+            }
+        );
+
+        const prediction = response.data.choices[0].message.content;
+        
+        console.log('✅ AI prediction generated successfully');
+        
+        res.status(200).json({
+            success: true,
+            prediction: prediction,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('❌ Error getting AI prediction:', error.message);
+        if (error.response) {
+            console.error('Groq API error:', error.response.data);
+        }
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get AI prediction',
             error: error.message
         });
     }

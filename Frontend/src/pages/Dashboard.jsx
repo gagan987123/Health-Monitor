@@ -18,6 +18,7 @@ import StatCard from '../components/Dashboard/StatCard';
 import HeartRateChart from '../components/Dashboard/HeartRateChart';
 import SpO2Chart from '../components/Dashboard/SpO2Chart';
 import TemperatureChart from '../components/Dashboard/TemperatureChart';
+import AIPrediction from '../components/Dashboard/AIPrediction';
 
 
 const THRESHOLDS = {
@@ -47,7 +48,7 @@ const Dashboard = () => {
   // Initialize Socket.IO connection
   useEffect(() => {
     // Connect to the WebSocket server
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://health-monitor-uyt6.onrender.com';
+    const backendUrl = 'http://localhost:3000';
     const socket = io(backendUrl, {
       reconnection: true,
       reconnectionAttempts: 5,
@@ -166,7 +167,7 @@ const Dashboard = () => {
         `
       };
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://health-monitor-uyt6.onrender.com';
+      const backendUrl = 'http://localhost:3000';
       const response = await fetch(`${backendUrl}/api/send-emergency-email`, {
         method: 'POST',
         headers: {
@@ -680,8 +681,15 @@ const Dashboard = () => {
           </Box>
         </Grid>
         
+        {/* AI Prediction Component */}
+        <Grid item xs={12} md={6}>
+          <Box sx={{ height: { xs: 'auto', sm: 500 } }}>
+            <AIPrediction vitalsHistory={vitalsHistory} />
+          </Box>
+        </Grid>
+        
         {/* Alerts Section */}
-        <Grid item xs={12}>
+        <Grid item xs={12} md={6}>
           <Paper sx={{ 
             p: { xs: 1, sm: 2 }, 
             height: '100%', 
