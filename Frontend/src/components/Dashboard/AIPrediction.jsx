@@ -27,7 +27,7 @@ const AIPrediction = ({ vitalsHistory = [] }) => {
         ? vitalsHistory 
         : [{ heartRate: 0, spo2: 0, temperature: 0, timestamp: new Date().toISOString() }];
 
-      const response = await fetch('http://localhost:3000/api/ai-predict', {
+      const response = await fetch('https://health-monitor-uyt6.onrender.com/api/ai-predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

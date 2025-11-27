@@ -48,7 +48,7 @@ const Dashboard = () => {
   // Initialize Socket.IO connection
   useEffect(() => {
     // Connect to the WebSocket server
-    const backendUrl = 'http://localhost:3000';
+    const backendUrl = 'https://health-monitor-uyt6.onrender.com';
     const socket = io(backendUrl, {
       reconnection: true,
       reconnectionAttempts: 5,
@@ -167,7 +167,7 @@ const Dashboard = () => {
         `
       };
 
-      const backendUrl = 'http://localhost:3000';
+      const backendUrl = 'https://health-monitor-uyt6.onrender.com';
       const response = await fetch(`${backendUrl}/api/send-emergency-email`, {
         method: 'POST',
         headers: {

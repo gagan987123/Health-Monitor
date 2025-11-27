@@ -167,14 +167,37 @@ app.post('/api/ai-predict', async (req, res) => {
 Vital Signs History:
 ${vitalsData}
 
-Please analyze this data and provide:
-1. Current Health Status: Brief assessment of the current vital signs
-2. Trend Analysis: Identify any concerning trends or patterns
-3. Risk Assessment: Potential health risks based on the data
-4. Recommendations: Specific actionable health recommendations
-5. When to Seek Medical Attention: Warning signs to watch for
+IMPORTANT: Format your response ONLY in bullet points with clear sections. Include specific numbers and ranges.
 
-Format your response in a clear, structured manner. Be professional but easy to understand. If any vitals are concerning, emphasize the importance of consulting a healthcare professional.`;
+Provide analysis in this exact format:
+
+📊 Current Health Status:
+- Heart Rate: [value] bpm - [Normal/High/Low] (Normal range: 60-100 bpm)
+- SpO2: [value]% - [Normal/High/Low] (Normal range: 95-100%)
+- Temperature: [value]°C - [Normal/High/Low] (Normal range: 36.1-37.2°C)
+
+📈 Trend Analysis:
+- [Specific trend observation with numbers]
+- [Pattern identified with percentage/values]
+- [Any concerning changes with metrics]
+
+⚠️ Risk Assessment:
+- [Specific risk with severity level]
+- [Potential health concern with likelihood]
+- [Any immediate concerns]
+
+💡 Recommendations:
+- [Specific actionable advice #1]
+- [Specific actionable advice #2]
+- [Lifestyle or monitoring suggestion]
+- [Follow-up recommendation]
+
+🏥 When to Seek Medical Attention:
+- [Warning sign #1 with threshold]
+- [Warning sign #2 with threshold]
+- [Emergency indicator]
+
+Use ONLY bullet points. Include specific numbers, percentages, and ranges. Be concise and actionable.`;
 
         // Call Groq API
         const response = await axios.post(
